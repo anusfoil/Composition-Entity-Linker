@@ -1,0 +1,4 @@
+catalog number
+- record 的catalog number会出错，需要二次校对
+- op.37a vs. op.37...
+- D820这样的情况
