@@ -2,3 +2,19 @@ catalog number
 - record 的catalog number会出错，需要二次校对
 - op.37a vs. op.37...
 - D820这样的情况
+- S.244/17 这种op过了后要继续筛
+- 同时有Op和个人作品号的（比如海顿），个人作品号那个更准一些
+    - Hob的后面是罗马数字...
+- beethoven的op对应多个sonata
+- 没有作品号的
+- 有两个以上作品号的
+
+- composer不存在：Aleksandr Porfiyevich Borodin
+
+
+- catalog number丢失的问题
+    "Violin Concerto, Op.35",https://imslp.org/wiki/Violin_Concerto%2C_Op.35_(Tchaikovsky%2C_Pyotr)
+    Piano Quintet,https://imslp.org/wiki/Piano_Quintet_(Franck%2C_C%C3%A9sar)
+
+
+

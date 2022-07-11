@@ -3,13 +3,14 @@ import re
 from numpy import result_type
 import pandas as pd
 import logging
+from thefuzz import fuzz
 
 from tqdm import tqdm
 
 import hook
 
 
-OPUS_TERMS = ["Op.", "K.", "BWV", "FWV", "D.", "SZ.", "L.", "M."]
+OPUS_TERMS = ["Op.", "K.", "BWV", "FWV", "D.", "Sz.", "L.", "M.", "S.", "Hob."]
 
 
 def get_substring(exp, str):
@@ -49,7 +50,6 @@ def parse_movements(movements):
     return movements_num, movements_name
 
 
-
 def parse_title_info(title):
     """
     title: "Piano Sonata No. 9 in E Major, Op. 14, No. 1: II. Allegretto"
@@ -65,7 +65,7 @@ def parse_title_info(title):
     info = {
         "key": "N/A",
         "opus": "N/A",
-        "no": None
+        "no": "N/A"
     }
 
     """read the key and capitalize it"""
@@ -85,14 +85,11 @@ def parse_title_info(title):
             if numeric:
                 info["opus"] = f"{term}{numeric[0]}" if ("." in term) else f"{term} {numeric[0]}"
 
-    # if len(title.split("No.")) > 1:
-    #     info["no"] = re.findall(r'\d+', title.split("No.")[-1])[0] 
+    if len(title.split("No.")) > 1:
+        info["no"] = re.findall(r'\d+', title.split("No.")[-1])[0] 
 
-    # if title == 'Piano Sonata No. 8 in C Minor, Op. 13 "Pathétique"':
-    # if title == 'Piano Sonata No. 8 in C Minor op. 13 "pathetique"':
-    # 	hook()
 
-    return info['key'], info['opus']
+    return info['key'], info['opus'], info['no']
 
 
 def format_match(composition, record):
@@ -105,16 +102,48 @@ def format_match(composition, record):
             as: \n \
             {composer}: {title} \n"
 
+
 def similarity(composition, record):
-    """return the overall similarity score for a composition
-
-    Args:
-        composition: title, work_title, alt_title
-        track: track, 
     """
+    composition: title, compositon
+    record: track, 
 
+    Input: rep includes all possible movements
+    composition = {
+        "composition-title"                                                   Impromptu passione
+        "composition-link"                     https://imslp.org/wiki/Impromptu_passione_(Mus...
+        "composition-work_title"                                              Impromptu passione
+        "composition-alt_title"                ['Souvenir de Beltov et Liouba (Recollection o...
+        "composition-translations"                                                            {}
+        "composition-alias"                                                                   {}
+        "composition-catalogue_number"                                                        []
+        "composition-I-catalogue_number"                                                  IMM 27
+        "composition-key"                                                                    N/A
+        "composition-movements_or_sections"                                            ['1', []]
+        "composition-language"                                                               N/A
+        "composition-average_duration"                                                       N/A
+        "composition-composer_period"                                                   Romantic
+        "composition-piece_style"                                                       Romantic
+        "composition-instrumentation"                                                      piano
+        "composition-genre"                                                           Impromptus
+        "composer-openopus_name"                                               Modest Mussorgsky
+        "composer-imslp_name"                                                 Mussorgsky, Modest
+        "composer-birth"                                                              21-03-1839
+        "composer-death"                                                              28-03-1881
+        "movements_num"                                                                        1
+    }
+    record: {
+        "track": "Piano Sonata in A Minor, Op. 42, D. 845: I. Moderato", 
+        "composer": "Franz Schubert,
+    }
 
-    return 
+    Return: 
+    """	
+
+    # THR = 0.72
+
+    return fuzz.partial_ratio(composition['composition-title'], record.track)
+
 
 class CELlinker():
     def __init__(self, ref_file_path):
@@ -141,35 +170,67 @@ class CELlinker():
 
         return record
 
-    def query(self, record):
+    def query_composition(self, record):
         """query the track information and return the most likely composition
 
         Args:
-            record (pd.row): 
+            record: 
             record.track: track title
             record.composer: 
-            record.track_duration: in seconds
         """
 
         # filter by composer
         database_composer = self.database[self.database['composer-openopus_name'] == record.composer]
         
-        key, catalog_number = parse_title_info(record.track)
+        if len(database_composer) == 0:
+            return None
 
+        key, catalog_number, work_number = parse_title_info(record.track)
 
-        composition = database_composer[database_composer['composition-catalogue_number'].str.contains(catalog_number+"'")]
-        if len(composition) >= 1:
-            rlogger.info(format_match(composition.iloc[0], record))
-            return 1
-        elif len(composition) >= 2:
+        # filter by catalog number
+        composition = database_composer[database_composer['composition-catalogue_number'].str.contains(catalog_number+r"('| |/)")]
+        # filter by work number (No.) given that multiple works under one catalog number
+        composition_work = composition[composition['composition-catalogue_number'].str.contains(work_number+r"('| |/)")]
+
+        if len(composition) == 1:
+            return composition
+        elif len(composition_work) == 1:
+            return composition_work
+        elif len(composition_work) >= 2:
             # TODO
-            pass
+            return None
         else:
-            rlogger.info(f"+++> Not found: {record.track}")  
-            return 0      
+            # no catalog number, search all for similarity. 
+            database_composer["similarity"] = database_composer.apply(lambda x: similarity(x, record), axis=1)
+            database_composer = database_composer.sort_values(by=["similarity"], ascending=False)
 
-        return 
+            # if "Pictures at an Exhibition dedicated to Viktor Hartman" in record.track:
+            #     hook()
+
+            THR = 0.72
+            if database_composer.iloc[0].similarity < THR:
+                return None
+            else:
+
+                return database_composer.iloc[0]
+             
     
+    def query_movement(self, composition, record):
+        
+        return 1
+
+    def query(self, record):
+        
+        composition = self.query_composition(record)
+
+        if composition is not None:
+            formated_match = format_match(composition, record)
+            # rlogger.info(formated_match)
+            return self.query_movement(composition, record)
+        else:
+            rlogger.info(f"+++> Not found: {record.track}")
+            return 0
+
     def batch_query(self, records_file_path):
         records = pd.read_csv(records_file_path)
 
