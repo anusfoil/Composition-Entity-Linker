@@ -86,7 +86,9 @@ def parse_title_info(title):
                 info["opus"] = f"{term}{numeric[0]}" if ("." in term) else f"{term} {numeric[0]}"
 
     if len(title.split("No.")) > 1:
-        info["no"] = re.findall(r'\d+', title.split("No.")[-1])[0] 
+        num = re.findall(r'\d+', title.split("No.")[-1])
+        if num:
+            info["no"] = num[0] 
 
 
     return info['key'], info['opus'], info['no']
@@ -174,7 +176,6 @@ class CELlinker():
         """query the track information and return the most likely composition
 
         Args:
-            record: 
             record.track: track title
             record.composer: 
         """
