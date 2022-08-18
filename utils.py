@@ -19,6 +19,11 @@ def parse_movements(movements):
         ['unruhig', []]
         ['3 movements', ['Allegro', 'Adagio', 'Allegro']]
         ['1. Presto 2. Largo 3. Allegro', []] <-- outlier
+
+    returns: 
+        movements_num: int
+        movements_name: string of movements joint by ", "
+        num equals the number of movements names
     """
     if movements == "N/A":
         return 0, "N/A" # nan
@@ -37,7 +42,7 @@ def parse_movements(movements):
         # logger.error(f"number of movements: {movements}")
         pass
 
-    movements_name = ", ".join(movements[1])
+    movements_name = "||".join(movements[1])
 
     return movements_num, movements_name
 
@@ -61,14 +66,22 @@ def parse_title_info(title):
     }
 
     """read the key and capitalize it"""
-    key_split = re.findall(r'[Ii]n .+?,', title)
+    key_split = re.findall(r'[Ii]n .+?,', title) # find "in"
     if not key_split:
         key_split = re.findall(r'[Ii]n .+?or', title)
+    if not key_split: # no "in", but the key is in parentheses
+        key_split = re.findall(r'\(.+?or', title)
+    
     if key_split:
-        key = key_split[0][3:].replace(",", "")
+        key = re.sub(r"[(,]", "", key_split[0])
+        key = re.sub(r"[Ii]n ", "", key)
+
         if "or" not in key:
             key += " Major"
         info['key'] = key.title() # capitalize
+
+    info['key'] = info['key'].replace("♯", " Sharp")
+    info['key'] = info['key'].replace("♭", " Flat")
 
 
     for term in OPUS_TERMS:
@@ -86,29 +99,30 @@ def parse_title_info(title):
     return info['key'], info['opus'], info['no']
 
 
-def format_match(composition, record):
+def format_match(result, record):
     """format a found match between record and composition
     
-    composition: a row in reference dataframe
+    result:
+        composition: str, composition name
+        movement: str
+        composer: str, composer in database
+    record: 
     """
 
-    if type(composition["composition-title"]) == str:
-        title = composition["composition-title"]
-        composer = composition["composer-openopus_name"]
-    else:
-        title = composition["composition-title"].values[0]
-        composer = composition["composer-openopus_name"].values[0]
+    title = result["composition"]
+    movement = result["movement"]
+    composer = result["composer"]
     return f"===> Founded composition for record: \n \
             {record.composer}: {record.title} \n \
             as: \n \
-            {composer}: {title} \n"
+            {composer}: {title}: {movement} \n"
 
 
 def string_fuzz_similarity(s1, s2):
     return fuzz.partial_ratio(s1, s2)
 
 
-def similarity(composition, record):
+def similarity(composition, key, record):
     """
     composition: title, compositon
     record: track, 
@@ -136,7 +150,11 @@ def similarity(composition, record):
         "composer-birth"                                                              21-03-1839
         "composer-death"                                                              28-03-1881
         "movements_num"                                                                        1
+        "movements_name"                       Allegro moderato (G major)||Minuet - Trio (G m...
     }
+
+    key: "A Minor"
+
     record: {
         "title": "Piano Sonata in A Minor, Op. 42, D. 845: I. Moderato", 
         "composer": "Franz Schubert,
@@ -145,4 +163,16 @@ def similarity(composition, record):
     Return: 
     """	
 
-    return string_fuzz_similarity(composition['composition-title'], record.title)
+    composition_title_sim = string_fuzz_similarity(composition['composition-title'], record.title)
+
+    movements = composition["movements_name"] if type(composition["movements_name"]) == str else composition["movements_name"].values[0]
+    movements = movements.split("||")
+    mvt_sim = list(map(lambda x: string_fuzz_similarity(x, record.title) - 30 * (key != parse_title_info(x)[0]), 
+            movements))
+
+    
+    # if "feux follets" in record.title and "S.139" in composition['composition-title']:
+    #     hook()
+
+    # the similarity is determined by title and movements together
+    return composition_title_sim + max(mvt_sim)

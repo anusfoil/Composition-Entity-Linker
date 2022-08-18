@@ -35,20 +35,22 @@ class CELlinker():
 
         return 
 
-    def process_input(self, record):
-        """standarize the record input for query
-
-        clean the composer as the most similar composer name
-        """
+    def process_spotify_input(self, record):
         
         composer = record.track_artists.split("/")[0]
-        if composer not in self.all_composers:
-            composer_similarity = list(map(lambda x: string_fuzz_similarity(x, composer), self.all_composers))
-            composer = self.all_composers[argmax(composer_similarity)]
-
-        # spotify crawled data
         track = Track(record.track,
                         composer=composer)
+
+        return track
+
+    def process_input(self, track):
+        """standarize the record input for query
+            - clean the composer as the most similar composer name
+        """
+
+        if track.composer not in self.all_composers:
+            composer_similarity = list(map(lambda x: string_fuzz_similarity(x, track.composer), self.all_composers))
+            track.composer = self.all_composers[argmax(composer_similarity)]
 
         return track
 
@@ -60,16 +62,23 @@ class CELlinker():
             record.composer: 
 
         Returns:
-            composition: row in the reference dataframe
-
-            (if composition not found then return 0)
+            composition: row in the reference dataframe, or None
+            movement: None, will be processed in next step
         """
+
+        result = {
+            "found_flag": False,
+            "composition": None,
+            "movement": None,
+            "composer": None
+        }
 
         # filter by composer
         composer_composition_list = self.database[self.database['composer-openopus_name'] == record.composer]
         
+        # No composer case: search in the entire database
         if len(composer_composition_list) == 0:
-            return None
+            composer_composition_list = self.database
 
         key, catalog_number, work_number = parse_title_info(record.title)
 
@@ -80,72 +89,111 @@ class CELlinker():
 
 
         if len(composition_list) == 1:
-            return composition_list
+            result['composition'] = composition_list
         elif len(composition_work_list) == 1:
-            return composition_work_list
+            result['composition'] = composition_work_list
         else:
             if len(composition_list) == 0:
                 composition_list = composer_composition_list
-            # no catalog number or more catalog number, search all for similarity. 
-            composition_list["similarity"] = composition_list.apply(lambda x: similarity(x, record), axis=1)
+
+            # no catalog number or more catalog number, search all for similarity. similarity includes the movement
+            composition_list["similarity"] = composition_list.apply(lambda x: similarity(x, key, record), axis=1)
             composition_list = composition_list.sort_values(by=["similarity"], ascending=False)
 
-            # if "Lyriske Stykke Op. 12 No.1: I" in record.title:
-            #     hook()
-            # if "Cello Sonata No. 5 in D Major, Op. 102 No. 2: " in record.title:
+            # if "feux follets" in record.title:
             #     hook()
 
             THR = 60
             if composition_list.iloc[0].similarity < THR:
-                return 0
+                return result
             else:
-                return composition_list.iloc[0]
-             
-    
-    def query_movement(self, composition, record):
+                result['composition'] = composition_list.iloc[0]
         
-        return composition
+        result["composer"] = result['composition']['composer-openopus_name']
+        if type(result["composer"]) != str:
+            result["composer"] = result["composer"].values[0]
+        result["found_flag"] = True
+        return result
+    
+    def query_movement(self, result, record):
+        """given the composition entry in reference, match the most likly movement part of the record
+        
+        args:
+            result: 
+            record: 
+        
+        """
+
+        if result["found_flag"]:
+            composition = result["composition"]
+            movements = composition["movements_name"] if type(composition["movements_name"]) == str else composition["movements_name"].values[0]
+            movements = movements.split("||")
+            mvt_similarity = list(map(lambda x: string_fuzz_similarity(x, record.title), movements))
+            found_mvt = movements[argmax(mvt_similarity)]
+
+            # if "15 Hungarian Peasant Songs, Sz. 71" in record.title:
+            #     hook()
+
+            result["movement"] = found_mvt
+            result["composition"] = result["composition"]["composition-title"]
+
+            if type(result['composition']) != str:
+                result['composition'] = result['composition'].values[0]
+        
+        return result
 
 
     def query(self, record):
         """query the record, return composition as the database row entry"""
-        
-        composition = self.query_composition(record)
 
-        if composition is not 0:
-            formated_match = format_match(composition, record)
-            # print(formated_match)
-            # rlogger.info(formated_match)
-            return self.query_movement(composition, record)
-        else:
-            if self.log:
-                rlogger.info(f"+++> Not found: {record.composer}: {record.title} ")
-            return 0
+        record = self.process_input(record)
+        result = self.query_movement(self.query_composition(record), record)
+        return result
+
 
     def batch_query(self, records_file_path):
         records = pd.read_csv(records_file_path)
 
         founded, total = [], len(records)
-        for idx, record in tqdm(records.iloc[:1000].iterrows()):
+        for idx, record in tqdm(records.iterrows()):
             if ("Applause" in record.track) or ("applause" in record.track):
                 total -= 1
                 continue
 
-            result = self.query(self.process_input(record))
-            if type(result) != int:
+            # if "Хорошо темперированный клавир" in record.track:
+            #     hook()
+
+            record = self.process_spotify_input(record)
+            result = self.query(record)
+
+            # if "feux follets" in record.title:
+            #     hook()
+
+            if result["found_flag"]:
                 founded.append(result)
+                formated_match = format_match(result, record)
+                # print(formated_match)
+                if self.log:
+                    rlogger.info(formated_match)
+            else:
+                if self.log:
+                    rlogger.info(f"+++> Not found: {record.composer}: {record.title} ")
         
         print(f"founded {len(founded)} / {total}")
 
-            # if idx == 100:
-            #     hook()
 
         return 
     
     def compare(self, track1, track2):
         """ compare two tracks for their similarity. right now test if they are map to the same composition
         """
-        return self.query(track1) == self.query(track2)
+        result1 = self.query(track1)
+        result2 = self.query(track2)
+        if result1["found_flag"] and result2["found_flag"]:
+            return ((result1["composition"] == result2["composition"])
+                    and (result1["movement"] == result2["movement"]))
+
+        return False
 
     
 if __name__ == "__main__":
@@ -162,7 +210,7 @@ if __name__ == "__main__":
     file_handler = logging.FileHandler('results.log')
     file_handler.setLevel(logging.INFO)
 
-    rlogger.addHandler(file_handler)
+    # rlogger.addHandler(file_handler)
     # logger.addHandler(stdout_handler)
 
 

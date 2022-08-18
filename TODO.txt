@@ -1,19 +1,29 @@
 catalog number
 - record 的catalog number会出错，需要二次校对
+    Piano Concerto No. 2 in C Minor, Op. 2: I. Moderato
 - op.37a vs. op.37...
 - D820这样的情况
 - 同时有Op和个人作品号的（比如海顿），个人作品号那个更准一些
     - Hob的后面是罗马数字...
 - 有两个No.
+- DONE title是movement的一部分，match不到composition本身 - Franz Liszt: Etude No. 5 in B flat Major "feux follets" 
 
-- 没有的作曲家：
+
+- database没有的作曲家：
     Gaetano Donizetti
     Alessandro Scarlatti
+
+- 作曲家错误！
+    做一个去掉作曲家的情况
+
+- 语言需要解决了！
+
+
+
+- movements
+    - 里面可能有关键词重叠然后找错了
+    - 逗号断句问题
+    - 可能还是需要数字辅助
     
-
-- catalog number丢失的问题
-    "Violin Concerto, Op.35",https://imslp.org/wiki/Violin_Concerto%2C_Op.35_(Tchaikovsky%2C_Pyotr)
-    Piano Quintet,https://imslp.org/wiki/Piano_Quintet_(Franck%2C_C%C3%A9sar)
-
 
 
