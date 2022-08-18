@@ -7,18 +7,23 @@ catalog number
     - Hob的后面是罗马数字...
 - 有两个No.
 - DONE title是movement的一部分，match不到composition本身 - Franz Liszt: Etude No. 5 in B flat Major "feux follets" 
-
+- 有两个catalog number，比如BWV846-869 和 BWV 859
 
 - database没有的作曲家：
     Gaetano Donizetti
     Alessandro Scarlatti
 
+
 - 作曲家错误！
     做一个去掉作曲家的情况
 
 - 语言需要解决了！
+    composer transliteration (DONE, 就是需要所有的数据)
+    title transliteration 
+        问题：爬下来的没有展开页面... 其实也不算不可以。就是格式不完整了
+    title alternative names: Das wohltemperierte Klavier
 
-
+- 关系， 比如说prelude是其中的一个乐章
 
 - movements
     - 里面可能有关键词重叠然后找错了

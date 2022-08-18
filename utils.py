@@ -1,3 +1,4 @@
+import string
 import sys
 import re
 from thefuzz import fuzz
@@ -85,8 +86,9 @@ def parse_title_info(title):
 
 
     for term in OPUS_TERMS:
-        if len(title.split(term)) == 2:
-            numeric = re.findall(r'\d+', title.split(term)[1])
+        # if there are multiple opus terms, get the last one
+        if len(title.split(term)) >= 2:
+            numeric = re.findall(r'\d+', title.split(term)[-1])
             if numeric:
                 info["opus"] = f"{term}{numeric[0]}" if ("." in term) else f"{term} {numeric[0]}"
 
@@ -116,6 +118,18 @@ def format_match(result, record):
             {record.composer}: {record.title} \n \
             as: \n \
             {composer}: {title}: {movement} \n"
+
+
+def composer_transliteration_similarity(openopus_composer, track_composer):
+    """
+    openopus_composer: {'transliteration': ['Jean Sébastien Bach (fr)', 'Jan Sebastian Bach', 'John Sebastian Bach (en)'], 'other_languages': ['Jean-Sébastien Bach', 'Иоганн Себастьян Бах', 'ইয়োহান জেবাস্টিয়ান বাখ', 'یۆھان سباستیان باخ', '巴赫'], 'aliases': ['Bach', 'Ёган Бах', 'Бах', 'Йоганн Себастиан', 'Бах']}
+    """
+
+    if type(openopus_composer) == str:
+        return string_fuzz_similarity(track_composer, openopus_composer)
+    # list of all names
+    all_names = openopus_composer['transliteration'] + openopus_composer['other_languages'] + openopus_composer['aliases']
+    return max([string_fuzz_similarity(track_composer, name) for name in all_names])
 
 
 def string_fuzz_similarity(s1, s2):
@@ -163,16 +177,23 @@ def similarity(composition, key, record):
     Return: 
     """	
 
-    composition_title_sim = string_fuzz_similarity(composition['composition-title'], record.title)
+    title_translations = [composition['composition-title']]
+    if composition['composition-translations'] != "N/A":
+        title_translations += list(eval(composition['composition-translations']).values()) 
+    if composition['composition-alias'] != "N/A":
+        title_translations += list(eval(composition['composition-alias']).values())
+    composition_sim = list(map(lambda x: string_fuzz_similarity(x, record.title), title_translations))
 
-    movements = composition["movements_name"] if type(composition["movements_name"]) == str else composition["movements_name"].values[0]
-    movements = movements.split("||")
-    mvt_sim = list(map(lambda x: string_fuzz_similarity(x, record.title) - 30 * (key != parse_title_info(x)[0]), 
-            movements))
 
-    
-    # if "feux follets" in record.title and "S.139" in composition['composition-title']:
+    mvt_sim = [0]
+    if composition["movements_name"] != "N/A":
+        movements = composition["movements_name"] if type(composition["movements_name"]) == str else composition["movements_name"].values[0]
+        movements = movements.split("||")
+        mvt_sim = list(map(lambda x: string_fuzz_similarity(x, record.title) - 30 * (key != parse_title_info(x)[0]), 
+                movements))
+
+    # if "Polonaise in G-flat major" in composition['composition-title']:
     #     hook()
 
     # the similarity is determined by title and movements together
-    return composition_title_sim + max(mvt_sim)
+    return max(composition_sim) + max(mvt_sim)

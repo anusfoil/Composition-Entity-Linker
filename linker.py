@@ -4,6 +4,7 @@ from numpy import argmax
 import pandas as pd
 import logging
 import pkg_resources
+import json
 
 from tqdm import tqdm
 
@@ -15,11 +16,14 @@ import hook
 
 class CELlinker():
     def __init__(self, ref_file_path=None, log=True):
-        if not ref_file_path:
-            ref_file_path = pkg_resources.resource_stream(__name__, "ref_corpus/CEL_meta_new.csv")
+
+        ref_file_path = pkg_resources.resource_stream(__name__, "ref_corpus/CEL_meta_new.csv")
+        composer_transliteration_json = "ref_corpus/composer_transliteration.json"
 
         self.database = pd.read_csv(ref_file_path)
-        self.all_composers = pd.unique(self.database['composer-openopus_name'])
+        self.openopus_composers = pd.unique(self.database['composer-openopus_name'])
+        with open(composer_transliteration_json, 'r') as f:
+            self.composer_transliteration = json.load(f)
         self.process_reference()
         self.log = log
 
@@ -45,12 +49,18 @@ class CELlinker():
 
     def process_input(self, track):
         """standarize the record input for query
-            - clean the composer as the most similar composer name
+            - clean the composer as the most similar composer name (TODO: transliteration?)
+            - replace common keywords 
         """
 
-        if track.composer not in self.all_composers:
-            composer_similarity = list(map(lambda x: string_fuzz_similarity(x, track.composer), self.all_composers))
-            track.composer = self.all_composers[argmax(composer_similarity)]
+        track.title = track.title.replace("соч.", "Op.")
+
+        if track.composer not in self.openopus_composers:
+            composer_similarity = list(map(
+                lambda x: composer_transliteration_similarity(self.composer_transliteration[x] if x in self.composer_transliteration else x
+                    , track.composer), 
+                self.openopus_composers))
+            track.composer = self.openopus_composers[argmax(composer_similarity)]
 
         return track
 
@@ -87,7 +97,6 @@ class CELlinker():
         # filter by work number (No.) given that multiple works under one catalog number
         composition_work_list = composition_list[composition_list['composition-catalogue_number'].str.contains(work_number+r"(?:'| |/)")]
 
-
         if len(composition_list) == 1:
             result['composition'] = composition_list
         elif len(composition_work_list) == 1:
@@ -100,7 +109,7 @@ class CELlinker():
             composition_list["similarity"] = composition_list.apply(lambda x: similarity(x, key, record), axis=1)
             composition_list = composition_list.sort_values(by=["similarity"], ascending=False)
 
-            # if "feux follets" in record.title:
+            # if "Баллада No. 1 соль минор" in record.title:
             #     hook()
 
             THR = 60
@@ -131,9 +140,6 @@ class CELlinker():
             mvt_similarity = list(map(lambda x: string_fuzz_similarity(x, record.title), movements))
             found_mvt = movements[argmax(mvt_similarity)]
 
-            # if "15 Hungarian Peasant Songs, Sz. 71" in record.title:
-            #     hook()
-
             result["movement"] = found_mvt
             result["composition"] = result["composition"]["composition-title"]
 
@@ -160,14 +166,11 @@ class CELlinker():
                 total -= 1
                 continue
 
-            # if "Хорошо темперированный клавир" in record.track:
+            # if "Das Wohltemperierte Klavie" in record.track:
             #     hook()
 
             record = self.process_spotify_input(record)
             result = self.query(record)
-
-            # if "feux follets" in record.title:
-            #     hook()
 
             if result["found_flag"]:
                 founded.append(result)
@@ -210,7 +213,7 @@ if __name__ == "__main__":
     file_handler = logging.FileHandler('results.log')
     file_handler.setLevel(logging.INFO)
 
-    # rlogger.addHandler(file_handler)
+    rlogger.addHandler(file_handler)
     # logger.addHandler(stdout_handler)
 
 
