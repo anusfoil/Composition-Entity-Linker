@@ -128,7 +128,9 @@ def composer_transliteration_similarity(openopus_composer, track_composer):
     if type(openopus_composer) == str:
         return string_fuzz_similarity(track_composer, openopus_composer)
     # list of all names
-    all_names = openopus_composer['transliteration'] + openopus_composer['other_languages'] + openopus_composer['aliases']
+    all_names = openopus_composer['transliterations'] + list(openopus_composer['other_languages'].values()) + list(openopus_composer['alias'].values())
+    if not all_names:
+        return 0
     return max([string_fuzz_similarity(track_composer, name) for name in all_names])
 
 

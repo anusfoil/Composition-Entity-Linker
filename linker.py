@@ -18,7 +18,7 @@ class CELlinker():
     def __init__(self, ref_file_path=None, log=True):
 
         ref_file_path = pkg_resources.resource_stream(__name__, "ref_corpus/CEL_meta_new.csv")
-        composer_transliteration_json = "ref_corpus/composer_transliteration.json"
+        composer_transliteration_json = "ref_corpus/composer_translations.json"
 
         self.database = pd.read_csv(ref_file_path)
         self.openopus_composers = pd.unique(self.database['composer-openopus_name'])
@@ -49,7 +49,7 @@ class CELlinker():
 
     def process_input(self, track):
         """standarize the record input for query
-            - clean the composer as the most similar composer name (TODO: transliteration?)
+            - clean the composer as the most similar composer name 
             - replace common keywords 
         """
 
@@ -57,8 +57,9 @@ class CELlinker():
 
         if track.composer not in self.openopus_composers:
             composer_similarity = list(map(
-                lambda x: composer_transliteration_similarity(self.composer_transliteration[x] if x in self.composer_transliteration else x
-                    , track.composer), 
+                lambda x: composer_transliteration_similarity(
+                    self.composer_transliteration[x] if x in self.composer_transliteration else x, 
+                    track.composer), 
                 self.openopus_composers))
             track.composer = self.openopus_composers[argmax(composer_similarity)]
 
@@ -162,15 +163,16 @@ class CELlinker():
 
         founded, total = [], len(records)
         for idx, record in tqdm(records.iterrows()):
-            if ("Applause" in record.track) or ("applause" in record.track):
+            if ("Applause" in record.track) or ("applause" in record.track) :
                 total -= 1
                 continue
 
-            # if "Das Wohltemperierte Klavie" in record.track:
+            query_record = self.process_spotify_input(record)
+
+            # if "Концерт для клавира и струнных" in record.title:
             #     hook()
 
-            record = self.process_spotify_input(record)
-            result = self.query(record)
+            result = self.query(query_record)
 
             if result["found_flag"]:
                 founded.append(result)
